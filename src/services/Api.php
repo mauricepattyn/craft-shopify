@@ -158,15 +158,18 @@ class Api extends Component
     }
 
     /**
-     * Shortcut for retrieving arbitrary API resources. A plain (parsed) response body is returned, so it’s the caller’s responsibility for unpacking it properly.
+     * Performs a GET request to the specified API endpoint with retries for certain error conditions.
      *
-     * @see Rest::get();
+     * @param string $path The API endpoint to request.
+     * @param array $query The query parameters to include in the request.
+     * @return array The decoded response body.
+     * @throws \Exception If the maximum number of retries is exceeded or for non-retryable errors.
      */
     public function get($path, array $query = [])
     {
         $maxRetries = 5;
         $retryCount = 0;
-
+    
         do {
             try {
                 $response = $this->getClient()->get($path, [], $query);
@@ -174,20 +177,20 @@ class Api extends Component
                 if (isset($responseData['errors'])) {
                     throw new \Exception('API Error: ' . json_encode($responseData['errors']));
                 }
-                usleep(500000);
                 return $responseData;
             } catch (\Exception $e) {
                 if ($retryCount >= $maxRetries) {
                     throw $e;
                 }
-                if ($e->getCode() == 429) {
+                if (strpos($e->getMessage(), '429') !== false) {
                     $retryAfter = $response->getHeader('Retry-After')[0] ?? 1;
                     sleep((int)$retryAfter);
-                    $retryCount++;
                 } else {
                     throw $e;
                 }
+                $retryCount++;
             }
+            usleep(500000);
         } while (true);
     }
 
