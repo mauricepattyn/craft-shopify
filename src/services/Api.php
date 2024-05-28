@@ -164,9 +164,31 @@ class Api extends Component
      */
     public function get($path, array $query = [])
     {
-        $response = $this->getClient()->get($path, [], $query);
+        $maxRetries = 5;
+        $retryCount = 0;
 
-        return $response->getDecodedBody();
+        do {
+            try {
+                $response = $this->getClient()->get($path, [], $query);
+                $responseData = $response->getDecodedBody();
+                if (isset($responseData['errors'])) {
+                    throw new \Exception('API Error: ' . json_encode($responseData['errors']));
+                }
+                usleep(500000);
+                return $responseData;
+            } catch (\Exception $e) {
+                if ($retryCount >= $maxRetries) {
+                    throw $e;
+                }
+                if ($e->getCode() == 429) {
+                    $retryAfter = $response->getHeader('Retry-After')[0] ?? 1;
+                    sleep((int)$retryAfter);
+                    $retryCount++;
+                } else {
+                    throw $e;
+                }
+            }
+        } while (true);
     }
 
     /**
